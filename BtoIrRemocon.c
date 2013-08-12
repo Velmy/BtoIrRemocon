@@ -42,7 +42,9 @@
 
 */
 
+#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
+#include <string.h>
 #include <stdio.h>
 #include <setupapi.h>
 
@@ -52,7 +54,7 @@
 #define RECEIVE_WAIT_MODE_WAIT  1
 
 #define DEVICE_BUFSIZE       65
-#define REMOCON_DATA_LENGTH   7
+#define REMOCON_DATA_LENGTH   (1 + 2 + 32)
 
 typedef void (__stdcall *DEF_HidD_GetHidGuid)(LPGUID HidGuid);
 
@@ -116,7 +118,7 @@ DWORD GetDevicePath(OUT char *pszDevicePath, IN DWORD cchBuf)
         }
         SetupDiGetDeviceRegistryProperty(DeviceInfoTable, &DevInfoData,
                             SPDRP_HARDWAREID, NULL, (PBYTE)hMem, dwSize, NULL);
-        pszProp = strdup((char*)hMem);
+        pszProp = _strdup((char*)hMem);
         GlobalFree(hMem);
         hMem = NULL;
         
@@ -181,7 +183,7 @@ int Transfer(HANDLE hDevice, int ac, char **av)
 
     memset(buf, 0xFF, sizeof(buf));
     buf[0] = 0;
-    buf[1] = 0x60; // 送信指定    
+    buf[1] = 0x61; // 送信指定    
 
     // パラメータを順に走査して処理
     for (i = 1; i < ac; i++) {
@@ -198,6 +200,7 @@ int Transfer(HANDLE hDevice, int ac, char **av)
             }
         }
         else if (strlen(pt) != REMOCON_DATA_LENGTH * 2) {
+            fprintf(stderr, "[%s] length is [%d].[%d].\n", pt,strlen(pt),REMOCON_DATA_LENGTH * 2);
             continue;
         }
         // 16 進文字列をバイト配列へ
@@ -250,7 +253,7 @@ int Display(HANDLE hDevice)
     // デバイスをリモコンデータ受信待ちモードに
     memset(buf, 0xFF, sizeof(buf));
     buf[0] = 0;
-    buf[1] = 0x51;
+    buf[1] = 0x53;
     buf[2] = RECEIVE_WAIT_MODE_WAIT;
     if (!WriteFile(hDevice, buf, DEVICE_BUFSIZE, &len, NULL)) {
         fprintf(stderr, "WriteFile: err=%u\n", GetLastError());
@@ -261,7 +264,7 @@ int Display(HANDLE hDevice)
         fprintf(stderr, "ReadFile: err=%u\n", GetLastError());
         goto DONE;
     }
-    if (buf[1] != 0x51) {
+    if (buf[1] != 0x53) {
         fprintf(stderr, "invalid response");
         goto DONE;
     }
@@ -269,13 +272,13 @@ int Display(HANDLE hDevice)
     while (TRUE) {
         memset(buf, 0xFF, sizeof(buf));
         buf[0] = 0;
-        buf[1] = 0x50;
+        buf[1] = 0x52;
         WriteFile(hDevice, buf, DEVICE_BUFSIZE, &len, NULL);
         memset(buf, 0x00, sizeof(buf));
         ReadFile(hDevice, buf, DEVICE_BUFSIZE, &len, NULL);
-        if (buf[1] == 0x50 && buf[2] != 0) {
+        if (buf[1] == 0x52 && buf[2] != 0) {
             // 受信データありなら 16 進表示
-            for (i = 0; i < 7; i++) {
+            for (i = 0; i < 1 + 2 + 32; i++) {
                 printf("%02X", buf[i+2]);
             }
             putchar('\n');
